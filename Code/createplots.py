@@ -15,7 +15,7 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.decomposition import PCA
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import nbformat
+# import nbformat
 import networkx as nx
 import argparse
 from datetime import datetime
@@ -178,6 +178,11 @@ def create_plot(impact_df, csv_filename):
     # Create the main figure with all pairs
     fig, axes = plt.subplots(nrows=len(feature_pairs)//2 + 1, ncols=2, figsize=(12, 5 * (len(feature_pairs)//2 + 1)))
 
+    # Initialize L-score matrix
+    n_features = len(features)
+    L_score_matrix = np.zeros((n_features, n_features))
+    feature_to_idx = {feature: idx for idx, feature in enumerate(features)}
+
     for ax, (feature1, feature2) in zip(axes.flatten(), feature_pairs):
         points = []
 
@@ -215,6 +220,10 @@ def create_plot(impact_df, csv_filename):
             if red_ok and blue_ok:
                 L_score = (red_skinny * blue_skinny) * (red_horiz - blue_horiz) / 2
                 L_score = round(L_score, 3)
+                # Store L-score in matrix
+                idx1, idx2 = feature_to_idx[feature1], feature_to_idx[feature2]
+                L_score_matrix[idx1, idx2] = L_score
+                L_score_matrix[idx2, idx1] = L_score  # Make matrix symmetric
             else:
                 L_score = None
         else:
@@ -287,8 +296,40 @@ def create_plot(impact_df, csv_filename):
     fig.savefig(main_filename)
     plt.close(fig)  # Close the main figure
     
+    # Create and save L-score matrix heatmap
+    plt.figure(figsize=(12, 10))
+    # Create custom colormap from green (-1) through white (0) to blue (1)
+    cmap = sns.diverging_palette(145, 10, as_cmap=True)
+    
+    # Create heatmap
+    sns.heatmap(L_score_matrix, 
+                xticklabels=features,
+                yticklabels=features,
+                cmap=cmap,
+                center=0,
+                vmin=-1,
+                vmax=1,
+                square=True,
+                annot=True,
+                fmt='.2f',
+                cbar_kws={'label': 'L-Score'})
+    
+    plt.title('L-Score Matrix')
+    plt.tight_layout()
+    
+    # Save L-score matrix
+    matrix_filename = f'{main_dir}/L_score_matrix_{current_time}.png'
+    plt.savefig(matrix_filename)
+    plt.close()
+    
+    # Save L-score matrix as CSV
+    matrix_df = pd.DataFrame(L_score_matrix, index=features, columns=features)
+    matrix_df.to_csv(f'{main_dir}/L_score_matrix_{current_time}.csv')
+    
     print(f"Individual pair plots saved to: {pairs_dir}")
     print(f"Combined plot saved to: {main_filename}")
+    print(f"L-score matrix saved to: {matrix_filename}")
+    print(f"L-score matrix data saved to: {main_dir}/L_score_matrix_{current_time}.csv")
 
 # use argparse to get the csv file
 if __name__ == "__main__":
